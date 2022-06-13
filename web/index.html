@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>wemeet-h5-demo</title>
+</head>
+<body>
+  <div>
+    <button id="gotoAuth">1. 发起授权</button>
+  </div>
+  <br/>
+  <div>
+    <button id="initJsApi" disabled>2. 初始化jsapi</button>
+  </div>
+  <br/>
+  <div>
+    <button id="getUserInfo" disabled>3. 调用jsapi</button>
+    <br/>
+    <textarea id="userInfoResp" disabled style="width: 300px;"></textarea>
+  </div>
+  <script src="https://cdn.meeting.tencent.com/jssdk/wemeet-js-sdk-1.0.24.js"></script>
+
+  <script>
+    const CORP_ID = '20xxxxx28'; // 企业ID
+    const SDK_ID = '19xxxxxxx47'; // 应用ID
+
+    const { permission, meeting } = wemeet;
+
+    const searchData = new URLSearchParams(location.search);
+
+    // 如果是授权页面重定向回来的会带上auth_code
+    const authCodeFromUrl = searchData.get('auth_code');
+
+    /**
+     * 授权登录
+     */
+    const handleAuth = async () => {
+      // 如果用户曾授权过该应用，可以走静默授权的方式
+      const getAuthCodePromise = authCodeFromUrl ? Promise.resolve(authCodeFromUrl)
+        : permission.requestAgentAuthCode({ sdkId: SDK_ID }).then(resp => resp.authCode);
+      const authCode = await getAuthCodePromise.catch((err) => {
+        console.error(err);
+        return '';
+      });
+
+      if (!authCode) {
+        // 去授权页获取auth_code
+        permission.requestAuth({
+          corpId: CORP_ID,
+          sdkId: SDK_ID,
+          redirectURI: location.href,
+          state: Math.floor(Math.random() * 1e5).toString(),
+        });
+        return;
+      }
+
+      /**
+       * 获取到authCode以后，将authCode传给后台进行授权登录
+       * OAuth授权成功后，获得该用户的登录态 (该登录态应用应该自己维护，例如下发token到用户的cookie等)
+       */
+      const authLoginUrl = `${location.origin}/api/auth-login`;
+      await fetch(authLoginUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          auth_code: authCode,
+        }),
+      })
+        .then(() => {
+          console.log('授权登录成功');
+          document.querySelector('#initJsApi').disabled = false;
+        })
+        .catch((err) => {
+          console.error(err);
+        });
+    };
+
+    async function handleInitJsApi() {
+      // get jsapi config data
+      const signDataUrl = `${location.origin}/api/jsapi_sign`;
+      const response = await fetch(signDataUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+      })
+        .then(res => res.json())
+        .catch((err) => {
+          console.error('获取jsapi签名数据失败', err);
+          throw err;
+        });
+
+      /**
+       * 调用permission.agentConfig进行jsapi鉴权
+       */
+      permission.agentConfig({
+        corpId: CORP_ID,
+        sdkId: SDK_ID,
+        timestamp: response.timestamp,
+        nonceStr: response.nonce,
+        signature: response.signature,
+      })
+        .then(() => {
+          console.log('jsapi 鉴权成功');
+          document.querySelector('#getUserInfo').disabled = false;
+          document.querySelector('#userInfoResp').disabled = false;
+        })
+        .catch((err) => {
+          console.error('jsapi 鉴权失败', err);
+        });
+    }
+
+    /**
+     * jsapi鉴权成功后，就可以调用会议提供的jsapi了
+     */
+    function handleGetUserInfo () {
+      meeting.getUserInfo()
+        .then((resp) => {
+          document.querySelector('#userInfoResp').value = JSON.stringify(resp);
+        }).catch(console.error);
+    }
+
+    document.querySelector('#gotoAuth').addEventListener('click', handleAuth);
+    document.querySelector('#initJsApi').addEventListener('click', handleInitJsApi);
+    document.querySelector('#getUserInfo').addEventListener('click', handleGetUserInfo);
+  </script>
+</body>
+</html>
