@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "wemeet-js-sdk demo",
   "main": "./server/index.js",
+  "type": "module",
   "repository": "https://github.com/alvinlswei/wemeet-js-sdk-demo.git",
   "author": "Alvin Wei <alvinwei1024@163.com>",
   "license": "MIT",
